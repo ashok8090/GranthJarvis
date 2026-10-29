@@ -105,8 +105,8 @@ void main() {
   group('Android side (read from the sources, the Kotlin JVM tests check the texts)', () {
     final main = Directory('android/app/src/main');
     String read(String p) => File('${main.path}/$p').readAsStringSync();
-    final pdf = read('kotlin/com/wnm/granthprabandhan/PdfService.kt');
-    final sync = read('kotlin/com/wnm/granthprabandhan/PageSyncService.kt');
+    final pdf = read('kotlin/com/test/granthprabandhan/PdfService.kt');
+    final sync = read('kotlin/com/test/granthprabandhan/PageSyncService.kt');
 
     test('every notification uses the one monochrome icon, and the old page icon is gone', () {
       for (final src in [pdf, sync]) {
@@ -136,8 +136,8 @@ void main() {
         expect(src, contains('setOnlyAlertOnce(true)'));
         expect(src, contains('GROUP'));
       }
-      expect(read('kotlin/com/wnm/granthprabandhan/MainActivity.kt'), isNot(contains('"pdfDone"')));
-      expect(read('kotlin/com/wnm/granthprabandhan/MainActivity.kt'), contains('"pdfSummary"'));
+      expect(read('kotlin/com/test/granthprabandhan/MainActivity.kt'), isNot(contains('"pdfDone"')));
+      expect(read('kotlin/com/test/granthprabandhan/MainActivity.kt'), contains('"pdfSummary"'));
     });
   });
 }
