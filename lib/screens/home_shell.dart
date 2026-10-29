@@ -21,6 +21,7 @@ import '../theme/colors.dart';
 import '../widgets/bounded_scroll.dart';
 import '../widgets/common.dart';
 import '../widgets/pdf_sheets.dart';
+import '../voice/granth_ai_button.dart';
 import 'dashboard_screen.dart';
 import 'ai_screen.dart';
 import 'gallery_screen.dart';
@@ -317,6 +318,7 @@ class _HomeShellState extends State<HomeShell> with TickerProviderStateMixin {
               ),
               // ashok's PDF deck: a centred modal over a scrim (it also covers the header).
               if (_deckOpen && PdfQueue.I.jobs.isNotEmpty) Positioned.fill(child: PdfDeckLayer(key: const ValueKey('pdf-deck-layer'), selected: _deckSel, onClose: _closeDeck)),
+              const GranthAiButton(),
               const _ToastLayer(),
             ],
               ),
