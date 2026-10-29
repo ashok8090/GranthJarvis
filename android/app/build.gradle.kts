@@ -16,7 +16,7 @@ val keyProps = Properties().apply {
 val hasReleaseKey = keyProps.getProperty("storeFile")?.let { file(it).exists() } == true
 
 android {
-    namespace = "com.wnm.granthprabandhan"
+    namespace = "com.test.granthprabandhan"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -27,7 +27,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.wnm.granthprabandhan"
+        applicationId = "com.test.granthprabandhan"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
