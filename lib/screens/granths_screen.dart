@@ -22,6 +22,7 @@ import '../widgets/overlays.dart';
 import '../widgets/panel.dart';
 import '../widgets/pop.dart';
 import '../widgets/pdf_sheets.dart';
+import '../voice/voice_query.dart';
 
 /// `Dh` — Granths / Sacred texts and scriptures.
 ///
@@ -64,7 +65,20 @@ class _GranthsPanelState extends State<GranthsPanel> with LivePanel {
   List<Granth>? _src;
 
   @override
+  void initState() {
+    super.initState();
+    VoiceQuery.ticks.addListener(_onVoiceQuery);
+  }
+
+  void _onVoiceQuery() {
+    final next = Places.query(widget.placeKey);
+    if (!mounted || next == _q) return;
+    setState(() => _q = next);
+  }
+
+  @override
   void dispose() {
+    VoiceQuery.ticks.removeListener(_onVoiceQuery);
     _log.dispose();
     super.dispose();
   }

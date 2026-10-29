@@ -19,6 +19,7 @@ import '../widgets/panel.dart';
 import '../widgets/pop.dart';
 import '../widgets/pdf_sheets.dart';
 import '../widgets/video_block.dart';
+import '../voice/voice_query.dart';
 
 /// `Hh` — प्रमाण list, optionally filtered by topic / granth / id.
 class PramansPanel extends StatefulWidget {
@@ -39,7 +40,20 @@ class _PramansPanelState extends State<PramansPanel> with LivePanel {
   List<Praman> _filtered = const [];
 
   @override
+  void initState() {
+    super.initState();
+    VoiceQuery.ticks.addListener(_onVoiceQuery);
+  }
+
+  void _onVoiceQuery() {
+    final next = Places.query(_key);
+    if (!mounted || next == _q) return;
+    setState(() => _q = next);
+  }
+
+  @override
   void dispose() {
+    VoiceQuery.ticks.removeListener(_onVoiceQuery);
     _log.dispose();
     super.dispose();
   }

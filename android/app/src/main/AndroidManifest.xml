@@ -111,6 +111,12 @@
             <action android:name="android.intent.action.GET_CONTENT" />
             <data android:mimeType="*/*" />
         </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
         <package android:name="com.google.android.gm" />
         <package android:name="com.google.android.apps.docs" />
     </queries>

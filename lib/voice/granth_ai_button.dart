@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+
+import '../theme/colors.dart';
+import '../widgets/common.dart';
 import 'granth_ai.dart';
 
-/// Floating mic button and status overlay for Granth AI.
+/// Floating mic for तत्व. Tap to talk — it does not listen in the background.
 /// Created by Faisal Rafi
 class GranthAiButton extends StatefulWidget {
   const GranthAiButton({super.key});
@@ -12,10 +15,28 @@ class GranthAiButton extends StatefulWidget {
 
 class _GranthAiButtonState extends State<GranthAiButton> with SingleTickerProviderStateMixin {
   final GranthAiController _ai = GranthAiController();
-  late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat(reverse: true);
+  late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200));
+
+  @override
+  void initState() {
+    super.initState();
+    _ai.addListener(_syncPulse);
+  }
+
+  /// Pulse only while the mic is open. An idle screen must not schedule frames.
+  void _syncPulse() {
+    if (!mounted) return;
+    if (_ai.listening) {
+      if (!_pulse.isAnimating) _pulse.repeat(reverse: true);
+    } else if (_pulse.isAnimating || _pulse.value != 0) {
+      _pulse.stop();
+      _pulse.value = 0;
+    }
+  }
 
   @override
   void dispose() {
+    _ai.removeListener(_syncPulse);
     _ai.dispose();
     _pulse.dispose();
     super.dispose();
@@ -26,6 +47,7 @@ class _GranthAiButtonState extends State<GranthAiButton> with SingleTickerProvid
     return ListenableBuilder(
       listenable: _ai,
       builder: (context, _) {
+        final listening = _ai.listening;
         return Positioned(
           right: 16,
           bottom: 80,
@@ -36,50 +58,116 @@ class _GranthAiButtonState extends State<GranthAiButton> with SingleTickerProvid
               if (_ai.recognized.isNotEmpty || _ai.response.isNotEmpty)
                 Container(
                   margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  constraints: const BoxConstraints(maxWidth: 260),
-                  decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                  constraints: const BoxConstraints(maxWidth: 280),
+                  decoration: BoxDecoration(
+                    color: GColors.paper,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: GColors.maroon, width: 1.5),
+                    boxShadow: [BoxShadow(color: GColors.shadow(0.16), blurRadius: 16, offset: const Offset(0, 6))],
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(_ai.status, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                      if (_ai.recognized.isNotEmpty) Text(_ai.recognized, style: const TextStyle(color: Colors.white, fontSize: 14)),
-                      if (_ai.response.isNotEmpty) Text(_ai.response, style: const TextStyle(color: Colors.amber, fontSize: 14)),
+                      Text('तत्व · ${_ai.preset.label}', style: GText.sans(size: 11, weight: FontWeight.w700, color: GColors.maroon)),
+                      const SizedBox(height: 4),
+                      Text(_ai.status, style: GText.sans(size: 12, color: GColors.muted)),
+                      if (_ai.recognized.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(_ai.recognized, style: GText.sans(size: 14, weight: FontWeight.w600, color: GColors.text, height: 1.35)),
+                      ],
+                      if (_ai.response.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(_ai.response, style: GText.script(size: 15, color: GColors.brown, height: 1.35)),
+                      ],
                     ],
                   ),
                 ),
-              GestureDetector(
-                onTap: () {
-                  if (_ai.listening) {
-                    _ai.stopListening();
-                  } else {
-                    _ai.startListening();
-                  }
-                },
-                child: AnimatedBuilder(
-                  animation: _pulse,
-                  builder: (context, child) {
-                    final scale = _ai.listening ? 1.0 + _pulse.value * 0.15 : 1.0;
-                    return Transform.scale(
-                      scale: scale,
-                      child: Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _ai.listening ? Colors.redAccent : const Color(0xFF7B1F2E),
-                          boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8, offset: const Offset(0, 4))],
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: GColors.paper,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: GColors.creamDark),
+                  boxShadow: [BoxShadow(color: GColors.shadow(0.12), blurRadius: 10, offset: const Offset(0, 4))],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final v in tatvaVoices)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: _VoiceChip(
+                          label: v.id == TatvaVoice.female ? 'स्त्री' : 'पुरुष',
+                          selected: _ai.voice == v.id,
+                          onTap: () => _ai.setVoice(v.id),
                         ),
-                        child: Icon(_ai.listening ? Icons.mic : Icons.mic_none, color: Colors.white, size: 32),
                       ),
-                    );
+                    _VoiceChip(
+                      label: _ai.voiceEnabled ? 'आवाज़' : 'मौन',
+                      selected: _ai.voiceEnabled,
+                      onTap: _ai.toggleVoice,
+                    ),
+                  ],
+                ),
+              ),
+              Semantics(
+                button: true,
+                label: listening ? 'तत्व सुनना बंद करें' : 'तत्व, सुनो तत्व बोलकर स्क्रीन खोलें',
+                child: Pressable(
+                  onTap: () {
+                    if (listening) {
+                      _ai.stopListening();
+                    } else {
+                      _ai.startListening();
+                    }
                   },
+                  child: AnimatedBuilder(
+                    animation: _pulse,
+                    builder: (context, child) {
+                      final scale = listening ? 1 + (_pulse.value * 0.06) + (_ai.sound * 0.08) : 1.0;
+                      return Transform.scale(scale: scale, child: child);
+                    },
+                    child: Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: listening ? GColors.saffron : GColors.maroon,
+                        boxShadow: [BoxShadow(color: GColors.shadow(0.22), blurRadius: 12, offset: const Offset(0, 4))],
+                      ),
+                      child: Icon(listening ? Icons.mic : Icons.mic_none, color: GColors.paper, size: 30),
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _VoiceChip extends StatelessWidget {
+  const _VoiceChip({required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? GColors.maroon : GColors.cream,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(label, style: GText.sans(size: 12, weight: FontWeight.w700, color: selected ? GColors.paper : GColors.maroon)),
+      ),
     );
   }
 }

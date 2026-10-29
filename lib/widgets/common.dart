@@ -751,6 +751,15 @@ class _SearchFieldState extends State<SearchField> {
   }
 
   @override
+  void didUpdateWidget(SearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initial != oldWidget.initial && widget.initial != _c.text) {
+      _c.value = TextEditingValue(text: widget.initial, selection: TextSelection.collapsed(offset: widget.initial.length));
+      _sent = widget.initial;
+    }
+  }
+
+  @override
   void dispose() {
     _t?.cancel();
     _c.dispose();

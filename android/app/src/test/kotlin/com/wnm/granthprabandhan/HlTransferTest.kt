@@ -1,4 +1,4 @@
-package com.wnm.granthprabandhan
+package com.test.granthprabandhan
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

@@ -18,6 +18,7 @@ import '../widgets/overlays.dart';
 import '../widgets/panel.dart';
 import '../widgets/pop.dart';
 import '../widgets/pdf_sheets.dart';
+import '../voice/voice_query.dart';
 
 /// `Th` — Topics / विषय / प्रश्नोत्तरी.
 class TopicsPanel extends StatefulWidget {
@@ -35,7 +36,20 @@ class _TopicsPanelState extends State<TopicsPanel> with LivePanel {
   SearchDoc _doc(Topic t) => CatalogStore.I.topicDoc(t);
 
   @override
+  void initState() {
+    super.initState();
+    VoiceQuery.ticks.addListener(_onVoiceQuery);
+  }
+
+  void _onVoiceQuery() {
+    final next = Places.query('topic-list-place');
+    if (!mounted || next == _q) return;
+    setState(() => _q = next);
+  }
+
+  @override
   void dispose() {
+    VoiceQuery.ticks.removeListener(_onVoiceQuery);
     _log.dispose();
     super.dispose();
   }
