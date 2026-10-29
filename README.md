@@ -94,3 +94,17 @@ storeFile=/path/to/keystore
 - The admin/editor screens of the web bundle (`granth-admin` IndexedDB drafts) are not ported. They were empty in the APK build.
 - The YouTube player is an embedded WebView iframe. Some videos may refuse to play when embedded.
 - Storage permission is asked only when it is needed, and only on Android 9 and older.
+
+## Granth AI (Voice Navigation)
+
+**Created by Faisal Rafi**
+
+A Jarvis-style voice assistant for navigating the app by voice.
+
+- Tap the floating microphone button (bottom-right).
+- Speak a command in Hindi, English, or Hinglish (e.g. “Hey Granth, open Rigved”, “Rigved kholo”, “Dashboard kholo”, “Peeche jao”).
+- The assistant recognizes the intent, resolves the Granth/Topic against the live catalog, and navigates using the existing `AppNav`.
+- Short spoken confirmation is given after the action.
+
+Packages: `speech_to_text`, `flutter_tts`, `permission_handler`.  
+Microphone permission is requested only when the button is pressed.
