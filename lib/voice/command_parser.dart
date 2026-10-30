@@ -130,11 +130,42 @@ const _fillerWords = [
 
 const _dashWords = ['dashboard', 'home', 'डैशबोर्ड', 'होम', 'मुख्य'];
 const _topicWords = ['topics', 'topic', 'विषय', 'विषयों', 'टॉपिक', 'टॉपिक्स'];
-const _pramanWords = ['pramaans', 'pramans', 'pramaan', 'praman', 'प्रमाण', 'प्रमाणों'];
+const _pramanWords = [
+  'pramaans',
+  'pramans',
+  'pramaan',
+  'praman',
+  'प्रमाण',
+  'प्रमाणों',
+];
 const _granthWords = ['granths', 'granth', 'ग्रन्थ', 'ग्रंथ'];
-const _searchWords = ['search', 'find', 'dhundho', 'dhundo', 'dhoondo', 'khojo', 'khoj', 'खोजो', 'खोज', 'ढूंढो', 'ढूँढो', 'ढूंढ', 'ढूँढ'];
+const _searchWords = [
+  'search',
+  'find',
+  'dhundho',
+  'dhundo',
+  'dhoondo',
+  'khojo',
+  'khoj',
+  'खोजो',
+  'खोज',
+  'ढूंढो',
+  'ढूँढो',
+  'ढूंढ',
+  'ढूँढ',
+];
 const _pdfWords = ['pdf', 'peedeeef', 'पीडीएफ'];
-const _backWords = ['back', 'peeche', 'piche', 'peche', 'picche', 'previous', 'पीछे', 'पिछे', 'वापस'];
+const _backWords = [
+  'back',
+  'peeche',
+  'piche',
+  'peche',
+  'picche',
+  'previous',
+  'पीछे',
+  'पिछे',
+  'वापस',
+];
 
 bool _hasWord(String s, List<String> words) {
   final padded = ' $s ';
@@ -165,7 +196,10 @@ String dropFillers(String s) {
   return t.replaceAll(RegExp(r'\s+'), ' ').trim();
 }
 
-String stripWake(String normalized) => normalized.replaceAll(wakePhrase, ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+String stripWake(String normalized) => normalized
+    .replaceAll(wakePhrase, ' ')
+    .replaceAll(RegExp(r'\s+'), ' ')
+    .trim();
 
 /// 0-based choice when the user is clarifying ("पहला", "2", "second").
 int? choiceIndex(String raw, int count) {
@@ -180,13 +214,20 @@ int? choiceIndex(String raw, int count) {
   return n;
 }
 
-NavCommand parseUtterance(String raw) {
+NavCommand parseUtterance(String raw, {bool requireWake = true}) {
   final norm = normalizeText(raw);
-  if (!wakePhrase.hasMatch(norm)) {
-    return const NavCommand(intent: NavIntent.unknown, needsWake: true, confidence: 0);
+  final woke = wakePhrase.hasMatch(norm);
+  if (!woke && requireWake) {
+    return const NavCommand(
+      intent: NavIntent.unknown,
+      needsWake: true,
+      confidence: 0,
+    );
   }
-  final body = stripWake(norm);
-  if (body.isEmpty) return const NavCommand(intent: NavIntent.wakeOnly, confidence: 1);
+  final body = woke ? stripWake(norm) : norm;
+  if (body.isEmpty) {
+    return const NavCommand(intent: NavIntent.wakeOnly, confidence: 1);
+  }
   return parseCommand(body);
 }
 
@@ -197,7 +238,12 @@ NavCommand parseCommand(String text) {
 
   if (_hasWord(s, _pdfWords)) {
     final name = dropFillers(_without(s, _pdfWords));
-    return NavCommand(intent: NavIntent.openPdf, destinationType: 'pdf', destinationName: name, searchQuery: name);
+    return NavCommand(
+      intent: NavIntent.openPdf,
+      destinationType: 'pdf',
+      destinationName: name,
+      searchQuery: name,
+    );
   }
   if (_hasWord(s, _backWords)) {
     return const NavCommand(intent: NavIntent.back, destinationType: 'back');
@@ -206,29 +252,85 @@ NavCommand parseCommand(String text) {
     var scope = 'granth';
     if (_hasWord(s, _topicWords)) scope = 'topic';
     if (_hasWord(s, _pramanWords)) scope = 'praman';
-    final q = dropFillers(_without(_without(_without(_without(s, _searchWords), _topicWords), _pramanWords), _granthWords));
-    return NavCommand(intent: NavIntent.search, destinationType: scope, destinationName: q, searchQuery: q);
+    final q = dropFillers(
+      _without(
+        _without(
+          _without(_without(s, _searchWords), _topicWords),
+          _pramanWords,
+        ),
+        _granthWords,
+      ),
+    );
+    return NavCommand(
+      intent: NavIntent.search,
+      destinationType: scope,
+      destinationName: q,
+      searchQuery: q,
+    );
   }
   if (_hasWord(s, _dashWords)) {
     final rest = dropFillers(_without(s, _dashWords));
-    if (rest.isEmpty) return const NavCommand(intent: NavIntent.dashboard, destinationType: 'dashboard');
+    if (rest.isEmpty) {
+      return const NavCommand(
+        intent: NavIntent.dashboard,
+        destinationType: 'dashboard',
+      );
+    }
   }
   if (_hasWord(s, _topicWords)) {
     final name = dropFillers(_without(s, _topicWords));
-    if (name.isEmpty) return const NavCommand(intent: NavIntent.topics, destinationType: 'topic');
-    return NavCommand(intent: NavIntent.openTopic, destinationType: 'topic', destinationName: name, searchQuery: name);
+    if (name.isEmpty) {
+      return const NavCommand(
+        intent: NavIntent.topics,
+        destinationType: 'topic',
+      );
+    }
+    return NavCommand(
+      intent: NavIntent.openTopic,
+      destinationType: 'topic',
+      destinationName: name,
+      searchQuery: name,
+    );
   }
   if (_hasWord(s, _pramanWords)) {
     final name = dropFillers(_without(s, _pramanWords));
-    if (name.isEmpty) return const NavCommand(intent: NavIntent.pramans, destinationType: 'praman');
-    return NavCommand(intent: NavIntent.openPraman, destinationType: 'praman', destinationName: name, searchQuery: name);
+    if (name.isEmpty) {
+      return const NavCommand(
+        intent: NavIntent.pramans,
+        destinationType: 'praman',
+      );
+    }
+    return NavCommand(
+      intent: NavIntent.openPraman,
+      destinationType: 'praman',
+      destinationName: name,
+      searchQuery: name,
+    );
   }
   if (_hasWord(s, _granthWords)) {
     final name = dropFillers(_without(s, _granthWords));
-    if (name.isEmpty) return const NavCommand(intent: NavIntent.granths, destinationType: 'granth');
-    return NavCommand(intent: NavIntent.openGranth, destinationType: 'granth', destinationName: name, searchQuery: name);
+    if (name.isEmpty) {
+      return const NavCommand(
+        intent: NavIntent.granths,
+        destinationType: 'granth',
+      );
+    }
+    return NavCommand(
+      intent: NavIntent.openGranth,
+      destinationType: 'granth',
+      destinationName: name,
+      searchQuery: name,
+    );
   }
   final name = dropFillers(s);
-  if (name.isEmpty) return const NavCommand(intent: NavIntent.unknown, confidence: 0);
-  return NavCommand(intent: NavIntent.openGranth, destinationType: 'granth', destinationName: name, searchQuery: name, confidence: 0.8);
+  if (name.isEmpty) {
+    return const NavCommand(intent: NavIntent.unknown, confidence: 0);
+  }
+  return NavCommand(
+    intent: NavIntent.openGranth,
+    destinationType: 'granth',
+    destinationName: name,
+    searchQuery: name,
+    confidence: 0.8,
+  );
 }

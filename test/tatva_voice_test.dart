@@ -32,24 +32,48 @@ void main() {
 
     final open = parseUtterance('सुनो तत्व ऋग्वेद खोलो');
     expect(open.intent, NavIntent.openGranth);
+    expect(
+      parseUtterance('सुनो तत्व ऋग्वेद खोलो').destinationName,
+      contains('ऋग्वेद'),
+    );
+  });
+
+  test('the mic tap is the wake, so a bare command still navigates', () {
+    final open = parseUtterance('ऋग्वेद खोलो', requireWake: false);
+    expect(open.needsWake, isFalse);
+    expect(open.intent, NavIntent.openGranth);
     expect(open.destinationName, contains('ऋग्वेद'));
+    expect(
+      parseUtterance('topics', requireWake: false).intent,
+      NavIntent.topics,
+    );
+    expect(parseUtterance('पीछे', requireWake: false).intent, NavIntent.back);
+    expect(parseUtterance('rigved kholo').needsWake, isTrue);
   });
 
-  test('clarification picks the spoken choice and does not invent a granth', () {
-    expect(choiceIndex('पहला', 3), 0);
-    expect(choiceIndex('second', 3), 1);
-    expect(choiceIndex('4', 2), isNull);
+  test(
+    'clarification picks the spoken choice and does not invent a granth',
+    () {
+      expect(choiceIndex('पहला', 3), 0);
+      expect(choiceIndex('second', 3), 1);
+      expect(choiceIndex('4', 2), isNull);
 
-    final rows = [
-      Granth({'id': '1', 'title': 'ऋग्वेद', 'author': '', 'description': ''}),
-      Granth({'id': '2', 'title': 'सामवेद', 'author': '', 'description': 'साम'}),
-    ];
-    final hit = matchGranths('rig veda', rows);
-    expect(hit.one?.id, '1');
-    expect(hit.ambiguous, isFalse);
+      final rows = [
+        Granth({'id': '1', 'title': 'ऋग्वेद', 'author': '', 'description': ''}),
+        Granth({
+          'id': '2',
+          'title': 'सामवेद',
+          'author': '',
+          'description': 'साम',
+        }),
+      ];
+      final hit = matchGranths('rig veda', rows);
+      expect(hit.one?.id, '1');
+      expect(hit.ambiguous, isFalse);
 
-    final missing = matchGranths('not a real book zzzqqq', rows);
-    expect(missing.missing, isTrue);
-    expect(missing.one, isNull);
-  });
+      final missing = matchGranths('not a real book zzzqqq', rows);
+      expect(missing.missing, isTrue);
+      expect(missing.one, isNull);
+    },
+  );
 }

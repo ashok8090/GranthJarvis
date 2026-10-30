@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
@@ -29,8 +30,20 @@ class TatvaVoicePreset {
 }
 
 const tatvaVoices = <TatvaVoicePreset>[
-  TatvaVoicePreset(TatvaVoice.female, 'स्त्री · Aarohi', 'नरम, ऊँची आवाज़', 1.16, 0.48),
-  TatvaVoicePreset(TatvaVoice.male, 'पुरुष · Arun', 'गहरी, शांत आवाज़', 0.76, 0.45),
+  TatvaVoicePreset(
+    TatvaVoice.female,
+    'स्त्री · Aarohi',
+    'नरम, ऊँची आवाज़',
+    1.16,
+    0.48,
+  ),
+  TatvaVoicePreset(
+    TatvaVoice.male,
+    'पुरुष · Arun',
+    'गहरी, शांत आवाज़',
+    0.76,
+    0.45,
+  ),
 ];
 
 class _Option {
@@ -66,6 +79,29 @@ class GranthAiController extends ChangeNotifier {
   bool _handling = false;
   bool _resume = false;
   List<_Option> _pending = const [];
+  int _session = 0;
+  int _bound = 0;
+  bool _accept = false;
+  int _retries = 0;
+  bool _retryQueued = false;
+  bool _gotWords = false;
+
+  static const _navPhrases = <String>[
+    'तत्व',
+    'सुनो तत्व',
+    'विषय',
+    'ग्रंथ',
+    'प्रमाण',
+    'पीछे',
+    'होम',
+    'डैशबोर्ड',
+    'ऋग्वेद',
+    'सामवेद',
+    'यजुर्वेद',
+    'अथर्ववेद',
+    'गीता',
+    'खोलो',
+  ];
 
   TatvaVoicePreset get preset => tatvaVoices.firstWhere((e) => e.id == voice);
 
@@ -80,7 +116,17 @@ class GranthAiController extends ChangeNotifier {
 
   Future<void> startListening() async {
     _loadPrefs();
+    _gen++;
+    _session++;
+    _handling = false;
+    _resume = false;
+    _retries = 0;
+    _retryQueued = false;
+    _gotWords = false;
+    _accept = false;
+    final session = _session;
     final perm = await Permission.microphone.request();
+    if (session != _session) return;
     if (!perm.isGranted) {
       status = 'माइक बंद है';
       response = 'माइक्रोफ़ोन की अनुमति चाहिए। सेटिंग में माइक चालू करें।';
@@ -96,26 +142,28 @@ class GranthAiController extends ChangeNotifier {
       if (!available) {
         available = await speech.initialize(
           onStatus: _onStatus,
-          onError: (e) {
-            listening = false;
-            sound = 0;
-            status = 'आवाज़ नहीं बनी';
-            response = 'फिर से बोलिए। शोर कम हो तो बेहतर सुनाई देगा।';
-            notifyListeners();
-          },
+          onError: _onError,
+          finalTimeout: const Duration(milliseconds: 1200),
+          options: [
+            stt.SpeechToText.androidNoBluetooth,
+            stt.SpeechToText.androidIntentLookup,
+          ],
         );
         if (available) await _pickLocale(speech);
       }
-    } catch (e) {
+    } catch (_) {
       available = false;
       status = 'आवाज़ नहीं बनी';
-      response = 'इस फ़ोन पर स्पीच पहचान शुरू नहीं हुई।';
+      response =
+          'इस फ़ोन पर स्पीच पहचान शुरू नहीं हुई। नीचे लिख दें, जैसे ऋग्वेद खोलो।';
       notifyListeners();
       return;
     }
+    if (session != _session) return;
     if (!available) {
       status = 'आवाज़ नहीं बनी';
-      response = 'इस फ़ोन पर स्पीच पहचान उपलब्ध नहीं है।';
+      response =
+          'इस फ़ोन पर स्पीच पहचान उपलब्ध नहीं है। नीचे लिख दें, जैसे ऋग्वेद खोलो।';
       notifyListeners();
       return;
     }
@@ -123,35 +171,132 @@ class GranthAiController extends ChangeNotifier {
     recognized = '';
     sound = 0;
     status = 'सुन रहा हूँ...';
+    if (_pending.isEmpty) {
+      response = 'बोलिए: ऋग्वेद खोलो, विषय, प्रमाण, या पीछे।';
+    }
     notifyListeners();
-    await _listen(speech, onDevice: true);
+    await _beginListen(session);
   }
 
-  Future<void> _listen(stt.SpeechToText speech, {required bool onDevice}) async {
+  /// Phone recognizer, not the offline Hindi pack. Offline-first fails at once
+  /// on most Android phones and the button used to report that as "no voice".
+  Future<void> _beginListen(int session) async {
+    final speech = _speech;
+    if (speech == null || session != _session) return;
+    _gotWords = false;
+    _retryQueued = false;
+    try {
+      if (speech.isListening) {
+        await speech.cancel();
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+    } catch (_) {}
+    if (session != _session) return;
+    _bound = session;
+    _accept = true;
+    if (session != _session) {
+      _accept = false;
+      return;
+    }
     try {
       await speech.listen(
         onResult: _onResult,
         onSoundLevelChange: _onLevel,
         listenOptions: stt.SpeechListenOptions(
           partialResults: true,
-          onDevice: onDevice,
-          listenMode: stt.ListenMode.dictation,
-          pauseFor: const Duration(seconds: 3),
-          listenFor: const Duration(seconds: 12),
+          onDevice: false,
+          listenMode: stt.ListenMode.confirmation,
+          pauseFor: const Duration(seconds: 2),
+          listenFor: const Duration(seconds: 8),
           localeId: _locale,
-          cancelOnError: true,
+          cancelOnError: false,
+          contextualPhrases: _navPhrases,
         ),
       );
     } catch (_) {
-      if (onDevice) {
-        await _listen(speech, onDevice: false);
-        return;
-      }
-      listening = false;
-      status = 'आवाज़ नहीं बनी';
-      response = 'सुन नहीं सका। माइक चेक करके फिर बोलिए।';
-      notifyListeners();
+      if (session != _session) return;
+      _queueRetry(session, 'error_client');
     }
+  }
+
+  void _onError(SpeechRecognitionError err) {
+    if (!_accept || _bound != _session) return;
+    _accept = false;
+    final heard = recognized.trim();
+    if (_gotWords && heard.isNotEmpty) {
+      listening = false;
+      sound = 0;
+      _process(heard);
+      return;
+    }
+    final code = err.errorMsg;
+    listening = false;
+    sound = 0;
+    if (code == 'error_no_match' || code == 'error_speech_timeout') {
+      status = 'सुनाई नहीं दिया';
+      response = 'कुछ सुनाई नहीं दिया। फिर से बोलिए, या नीचे लिख दें।';
+      notifyListeners();
+      return;
+    }
+    if (code == 'error_permission') {
+      status = 'माइक बंद है';
+      response = 'माइक्रोफ़ोन की अनुमति चाहिए। सेटिंग में माइक चालू करें।';
+      notifyListeners();
+      return;
+    }
+    _queueRetry(_bound, code);
+  }
+
+  void _queueRetry(int session, String code) {
+    if (session != _session || _retryQueued || _gotWords) return;
+    final language =
+        code == 'error_language_unavailable' ||
+        code == 'error_language_not_supported';
+    final retryable =
+        language ||
+        code == 'error_client' ||
+        code == 'error_busy' ||
+        code == 'error_network' ||
+        code == 'error_network_timeout' ||
+        code == 'error_server' ||
+        code == 'error_server_disconnected' ||
+        code == 'error_audio_error' ||
+        code.startsWith('error_unknown');
+    if (!retryable || _retries >= 2) {
+      _failMic();
+      return;
+    }
+    _retries++;
+    _retryQueued = true;
+    if (language || _retries >= 2) _locale = null;
+    status = 'फिर सुन रहा हूँ...';
+    listening = false;
+    sound = 0;
+    notifyListeners();
+    _retryLater(session);
+  }
+
+  Future<void> _retryLater(int session) async {
+    final speech = _speech;
+    try {
+      await speech?.cancel();
+    } catch (_) {}
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (session != _session) return;
+    listening = true;
+    sound = 0;
+    recognized = '';
+    status = 'सुन रहा हूँ...';
+    notifyListeners();
+    await _beginListen(session);
+  }
+
+  void _failMic() {
+    listening = false;
+    sound = 0;
+    status = 'आवाज़ नहीं बनी';
+    response = 'माइक से नहीं सुना। नीचे लिख दें, जैसे ऋग्वेद खोलो।';
+    notifyListeners();
   }
 
   Future<void> _pickLocale(stt.SpeechToText speech) async {
@@ -175,9 +320,10 @@ class GranthAiController extends ChangeNotifier {
   }
 
   void _onStatus(String s) {
+    if (!_accept || _bound != _session) return;
     if (s == 'listening') {
       listening = true;
-      status = 'सुन रहा हूँ...';
+      if (status != 'समझ रहा हूँ...') status = 'सुन रहा हूँ...';
     } else if (s == 'notListening' || s == 'done') {
       listening = false;
       sound = 0;
@@ -187,35 +333,44 @@ class GranthAiController extends ChangeNotifier {
   }
 
   void _onLevel(double level) {
-    final n = level <= 1.2 ? level.clamp(0.0, 1.0) : ((level + 2) / 12).clamp(0.0, 1.0);
+    if (!_accept || _bound != _session || !listening) return;
+    final n = level <= 1.2
+        ? level.clamp(0.0, 1.0)
+        : ((level + 2) / 12).clamp(0.0, 1.0);
     sound = n.toDouble();
     notifyListeners();
   }
 
   void _onResult(SpeechRecognitionResult result) {
+    if (!_accept || _bound != _session) return;
     final words = result.recognizedWords;
     final isFinal = result.finalResult;
     recognized = words;
+    if (words.trim().isNotEmpty) _gotWords = true;
     notifyListeners();
-    if (isFinal) {
-      listening = false;
-      sound = 0;
-      if (words.trim().isEmpty) {
-        status = 'तैयार';
-        notifyListeners();
-        return;
-      }
-      _process(words);
+    if (!isFinal) return;
+    _accept = false;
+    listening = false;
+    sound = 0;
+    if (words.trim().isEmpty) {
+      status = 'सुनाई नहीं दिया';
+      response = 'कुछ सुनाई नहीं दिया। फिर से बोलिए, या नीचे लिख दें।';
+      notifyListeners();
+      return;
     }
+    _process(words);
   }
 
   Future<void> stopListening() async {
     _gen++;
+    _session++;
     _handling = false;
     _resume = false;
+    _retryQueued = false;
+    _accept = false;
     _pending = const [];
     try {
-      await _speech?.stop();
+      await _speech?.cancel();
     } catch (_) {}
     try {
       await _tts?.stop();
@@ -224,6 +379,30 @@ class GranthAiController extends ChangeNotifier {
     sound = 0;
     status = 'तैयार';
     notifyListeners();
+  }
+
+  /// Typed navigation. The tap already woke the assistant, so this does not
+  /// ask for "सुनो तत्व" and does not clear a pending clarification.
+  Future<void> submitText(String text) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    _gen++;
+    _session++;
+    _handling = false;
+    _resume = false;
+    _retryQueued = false;
+    _accept = false;
+    try {
+      await _speech?.cancel();
+    } catch (_) {}
+    try {
+      await _tts?.stop();
+    } catch (_) {}
+    listening = false;
+    sound = 0;
+    recognized = trimmed;
+    notifyListeners();
+    await _process(trimmed);
   }
 
   void setVoice(TatvaVoice next) {
@@ -256,20 +435,20 @@ class GranthAiController extends ChangeNotifier {
       if (gen != _gen) return;
       response = spoken;
       final keepListening = gen == _gen && _resume;
-      status = keepListening ? 'सुन रहा हूँ...' : (spoken.isEmpty ? 'तैयार' : 'हो गया');
+      status = keepListening
+          ? 'सुन रहा हूँ...'
+          : (spoken.isEmpty ? 'तैयार' : 'हो गया');
       notifyListeners();
       if (spoken.isNotEmpty) await _speak(spoken, gen);
       if (keepListening && gen == _gen) {
         _resume = false;
-        final speech = _speech;
-        if (speech != null) {
-          listening = true;
-          sound = 0;
-          recognized = '';
-          status = 'सुन रहा हूँ...';
-          notifyListeners();
-          await _listen(speech, onDevice: true);
-        }
+        _retries = 0;
+        listening = true;
+        sound = 0;
+        recognized = '';
+        status = 'सुन रहा हूँ...';
+        notifyListeners();
+        await _beginListen(_session);
       }
     } catch (_) {
       if (gen != _gen) return;
@@ -298,13 +477,13 @@ class GranthAiController extends ChangeNotifier {
         return narrowed.open();
       }
     }
-    final cmd = parseUtterance(raw);
+    final cmd = parseUtterance(raw, requireWake: false);
     if (gen != _gen) return '';
     if (cmd.needsWake) {
       if (_pending.isNotEmpty) {
         return 'कौन सा? पहला, दूसरा बोलिए, या नाम दोहराइए।';
       }
-      return 'पहले सुनो तत्व बोलिए। जैसे: सुनो तत्व, ऋग्वेद खोलो।';
+      return 'कमांड समझ नहीं आया। उदाहरण: ऋग्वेद खोलो, विषय, प्रमाण, पीछे।';
     }
     _pending = const [];
     if (cmd.intent == NavIntent.wakeOnly) {
@@ -313,7 +492,7 @@ class GranthAiController extends ChangeNotifier {
     }
     if (cmd.intent == NavIntent.unknown) {
       status = 'समझ नहीं आया';
-      return 'कमांड समझ नहीं आया। सुनो तत्व, फिर स्क्रीन का नाम बोलिए।';
+      return 'कमांड समझ नहीं आया। उदाहरण: ऋग्वेद खोलो, विषय, प्रमाण, पीछे।';
     }
     return _execute(cmd);
   }
@@ -402,7 +581,11 @@ class GranthAiController extends ChangeNotifier {
     notifyListeners();
     final hit = matchGranths(name, store.granths);
     if (hit.missing) return 'यह ग्रंथ अभी ऐप में नहीं मिला।';
-    if (hit.ambiguous) return _ask(hit.many.map((g) => _Option(g.title, () => _goGranth(g))).toList());
+    if (hit.ambiguous) {
+      return _ask(
+        hit.many.map((g) => _Option(g.title, () => _goGranth(g))).toList(),
+      );
+    }
     return _goGranth(hit.one!);
   }
 
@@ -421,7 +604,11 @@ class GranthAiController extends ChangeNotifier {
     notifyListeners();
     final hit = matchTopics(name, store.topics);
     if (hit.missing) return 'यह विषय अभी ऐप में नहीं मिला।';
-    if (hit.ambiguous) return _ask(hit.many.map((t) => _Option(t.title, () => _goTopic(t))).toList());
+    if (hit.ambiguous) {
+      return _ask(
+        hit.many.map((t) => _Option(t.title, () => _goTopic(t))).toList(),
+      );
+    }
     return _goTopic(hit.one!);
   }
 
@@ -439,7 +626,16 @@ class GranthAiController extends ChangeNotifier {
     final hit = matchPramans(name, store.pramans);
     if (hit.missing) return 'यह प्रमाण अभी ऐप में नहीं मिला।';
     if (hit.ambiguous) {
-      return _ask(hit.many.map((p) => _Option(p.title.isEmpty ? p.granthTitle : p.title, () => _goPraman(p))).toList());
+      return _ask(
+        hit.many
+            .map(
+              (p) => _Option(
+                p.title.isEmpty ? p.granthTitle : p.title,
+                () => _goPraman(p),
+              ),
+            )
+            .toList(),
+      );
     }
     return _goPraman(hit.one!);
   }
@@ -469,7 +665,11 @@ class GranthAiController extends ChangeNotifier {
       final hit = matchGranths(name, store.granths);
       if (hit.missing) return 'यह ग्रंथ अभी ऐप में नहीं मिला।';
       if (hit.ambiguous) {
-        return _ask(hit.many.map((row) => _Option(row.title, () => _openSavedPdf(row))).toList());
+        return _ask(
+          hit.many
+              .map((row) => _Option(row.title, () => _openSavedPdf(row)))
+              .toList(),
+        );
       }
       g = hit.one;
     }
@@ -483,7 +683,9 @@ class GranthAiController extends ChangeNotifier {
         final items = await GalleryService.I.items();
         final id = 'pdf-granth-${g.id}';
         for (final item in items) {
-          if (item.kind == GalleryKind.pdf && item.id == id && item.filePath.isNotEmpty) {
+          if (item.kind == GalleryKind.pdf &&
+              item.id == id &&
+              item.filePath.isNotEmpty) {
             final ok = await FileActions.open(item.filePath, item.fileName);
             if (ok) return '${_label(g.title)} PDF खोल रहा हूँ।';
           }
@@ -497,7 +699,11 @@ class GranthAiController extends ChangeNotifier {
 
   String _ask(List<_Option> options) {
     _pending = options;
-    final names = options.map((e) => e.title).where((e) => e.isNotEmpty).take(3).join(', ');
+    final names = options
+        .map((e) => e.title)
+        .where((e) => e.isNotEmpty)
+        .take(3)
+        .join(', ');
     status = 'समझ रहा हूँ...';
     return 'कई नाम मिले: $names. पहला, दूसरा बोलिए, या नाम दोहराइए।';
   }
@@ -529,7 +735,11 @@ class GranthAiController extends ChangeNotifier {
       for (final item in raw) {
         if (item is! Map) continue;
         final locale = '${item['locale'] ?? ''}'.toLowerCase();
-        if (!locale.startsWith('hi') && !locale.contains('en-in') && !locale.contains('en_in')) continue;
+        if (!locale.startsWith('hi') &&
+            !locale.contains('en-in') &&
+            !locale.contains('en_in')) {
+          continue;
+        }
         hindi ??= item;
         final blob = '${item['name']} ${item['gender']}'.toLowerCase();
         final isFemale = blob.contains('female') || blob.contains('woman');
@@ -537,7 +747,9 @@ class GranthAiController extends ChangeNotifier {
         if (isFemale && female == null) female = item;
         if (isMale && male == null) male = item;
       }
-      final pick = voice == TatvaVoice.female ? (female ?? hindi) : (male ?? hindi);
+      final pick = voice == TatvaVoice.female
+          ? (female ?? hindi)
+          : (male ?? hindi);
       if (pick == null) return;
       final name = pick['name'];
       final locale = pick['locale'];
